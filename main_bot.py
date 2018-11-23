@@ -7,11 +7,12 @@ import random
 import weather_bot
 
 BOT_TOKEN = '61236655:AAGCHX7Pmyd4gdU1XQvaG5iZaf371cnrigo'
-SPLIT_WORD = 'или'.decode("utf-8")
 TELEGRAM_URL = 'https://api.telegram.org/bot'
+ADVICE_KEYPHRASE = [u'посоветуй', u'дай совет', u'что выбрать']
+SPLIT_WORD = u'или'
 
 
-class dialog():
+class Dialog:
 
     def __init__(self, user_id, dlg_id, username):
         self.username = username
@@ -43,7 +44,7 @@ class dialog():
             self.status = -1
 
 
-def get_frist_update():
+def get_first_update():
     r = requests.get(TELEGRAM_URL + BOT_TOKEN + '/getUpdates', auth=('user', 'pass'))
     data = r.json()
     if len(data["result"]) == 0:
@@ -51,8 +52,8 @@ def get_frist_update():
     return data["result"][0]["update_id"]
 
 
-def get_upate(offset):
-    r = requests.get(TELEGRAM_URL + BOT_TOKEN + '/getUpdates?timeout=20&offset=' + str(offset),
+def get_update(update_offset):
+    r = requests.get(TELEGRAM_URL + BOT_TOKEN + '/getUpdates?timeout=20&offset=' + str(update_offset),
                      auth=('user', 'pass'))
     data = r.json()
     return data
@@ -64,12 +65,27 @@ def send_message(user_id, message):
     requests.post(send_message_url, auth=('user', 'pass'))
 
 
-offset = get_frist_update()
+def get_data_from_update(upd):
+    param = {}
+    if "message" in upd["result"][x]:
+        param['user_id'] = upd["result"][x]["message"]["from"]["id"]
+        param['username'] = upd["result"][x]["message"]["from"]["username"]
+        param['user_message'] = upd["result"][x]["message"]["text"].lower()
+    else:
+        print upd["result"][x]["inline_query"]["query"]
+        param['user_id'] = upd["result"][x]["inline_query"]["from"]["id"]
+        param['username'] = upd["result"][x]["inline_query"]["from"]["username"]
+        param['user_message'] = upd["result"][x]["inline_query"]["query"].lower()
+
+    return param
+
+
+offset = get_first_update()
 dialogs = []
 
 while True:
 
-    update = get_upate(offset + 1)
+    update = get_update(offset + 1)
     if len(update["result"]) == 0:
         print("nothing")
         time.sleep(1)
@@ -79,36 +95,26 @@ while True:
 
     for x in range(0, len(update["result"])):
 
-        if "message" in update["result"][x]:
-            print('message')
-            user_id = update["result"][x]["message"]["from"]["id"]
-            username = update["result"][x]["message"]["from"]["username"]
-            user_message = update["result"][x]["message"]["text"].lower()
-        else:
-            print('inline_query')
-            print update["result"][x]["inline_query"]["query"]
-            user_id = update["result"][x]["inline_query"]["from"]["id"]
-            username = update["result"][x]["inline_query"]["from"]["username"]
-            user_message = update["result"][x]["inline_query"]["query"].lower()
+        params = get_data_from_update(update)
 
-        if user_message == 'посоветуй'.decode("utf-8"):
-            dialogs.append(dialog(user_id, 1, username))
+        if params['user_message'] in ADVICE_KEYPHRASE:
+            dialogs.append(Dialog(params['user_id'], 1, params['username']))
 
-        if user_message == 'погода'.decode("utf-8"):
-            send_message(user_id, weather_bot.get_weather("now"))
+        if params['user_message'] == 'погода'.decode("utf-8"):
+            send_message(params['user_id'], weather_bot.get_weather("now"))
 
-        if user_message == 'прогноз'.decode("utf-8"):
-            send_message(user_id, weather_bot.get_weather("day"))
+        if params['user_message'] == 'прогноз'.decode("utf-8"):
+            send_message(params['user_id'], weather_bot.get_weather("day"))
 
-        if user_message == 'спасибо'.decode("utf-8"):
-            send_message(user_id, "Пожалуйста! :)")
+        if params['user_message'] == 'спасибо'.decode("utf-8"):
+            send_message(params['user_id'], "Пожалуйста! :)")
 
         print('checking dialogs')
         for x in range(0, len(dialogs)):
             if dialogs[x].status == -1:
                 continue
             print('run dialog')
-            dialogs[x].run(user_message, user_id)
+            dialogs[x].run(params['user_message'], params['user_id'])
 
     offset = update["result"][len(update["result"]) - 1]["update_id"]
     time.sleep(1)
